@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>AI E-WASTE REWARD</title>
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+
+<script src="https://cdn.jsdelivr.net/npm/@teachablemachine/image@latest"></script>
+
+<style>
+
+body {
+    font-family: Arial;
+    background: #e8f5e9;
+    text-align: center;
+    padding: 15px;
+}
+
+h2 {
+    color: green;
+}
+
+button {
+    background: green;
+    color: white;
+    padding: 15px;
+    border: none;
+    border-radius: 8px;
+    margin: 10px;
+    font-size: 17px;
+}
+
+#result {
+    background: white;
+    padding: 20px;
+    margin-top: 20px;
+    border-radius: 10px;
+}
+
+</style>
+</head>
+
+<body>
+
+<h2>AI SMART E-WASTE SYSTEM</h2>
+
+<p>Scan your electronic waste</p>
+
+<div id="camera"></div>
+
+<button onclick="startCamera()">START CAMERA</button>
+
+<button onclick="detectObject()">DETECT OBJECT</button>
+
+<div id="result">
+Waiting for detection...
+</div>
+
+<script>
+
+const MODEL_URL =
+"https://teachablemachine.withgoogle.com/models/https://teachablemachine.withgoogle.com/models/[...]
+
+
+/";
+
+const ESP32_IP = "192.168.1.105";
+
+let model;
+let webcam;
+
+async function startCamera() {
+
+    try {
+
+        model = await tmImage.load(
+            MODEL_URL + "model.json",
+            MODEL_URL + "metadata.json"
+        );
+
+        webcam = new tmImage.Webcam(300, 300, true);
+
+        await webcam.setup({ facingMode: "environment" });
+
+        await webcam.play();
+
+        document.getElementById("camera")
+        .appendChild(webcam.canvas);
+
+    }
+
+    catch(error) {
+
+        alert("Camera Error: " + error);
+
+    }
+}
+
+async function detectObject() {
+
+    if (!model || !webcam) {
+        alert("Start Camera First");
+        return;
+    }
+
+    webcam.update();
+
+    const predictions = await model.predict(webcam.canvas);
+
+    predictions.sort(
+        (a,b) => b.probability - a.probability
+    );
+
+    const best = predictions[0];
+
+    const object = best.className.trim();
+
+    const confidence = (best.probability * 100).toFixed(1);
+
+    if (best.probability < 0.75) {
+        document.getElementById("result").innerHTML =
+        "Uncertain result. Please scan again.";
+        return;
+    }
+
+    let action;
+    let reward;
+
+    if (object.toLowerCase() === "non-e-waste") {
+
+        action = "NOT E-WASTE";
+        reward = 0;
+
+    } else {
+
+        action = "RECYCLE";
+        reward = 10;
+
+    }
+
+    document.getElementById("result").innerHTML =
+
+    "<h3>Detected: " + object + "</h3>" +
+    "<h3>Confidence: " + confidence + "%</h3>" +
+    "<h3>Action: " + action + "</h3>" +
+    "<h2>Reward: " + reward + " Points</h2>";
+
+    if (action === "RECYCLE") {
+
+        sendToESP32(object, action);
+
+    }
+
+}
+
+async function sendToESP32(object, action) {
+
+    const url =
+    "http://" + ESP32_IP +
+    "/result?object=" + encodeURIComponent(object) +
+    "&action=" + encodeURIComponent(action);
+
+    try {
+
+        const response = await fetch(url);
+
+        const message = await response.text();
+
+        console.log(message);
+
+    }
+
+    catch(error) {
+
+        alert("ESP32 connection failed: " + error);
+
+    }
+
+}
+
+</script>
+
+</body>
+</html>
